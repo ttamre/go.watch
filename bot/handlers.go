@@ -23,9 +23,10 @@ import (
     "strings"
     "time"
     "regexp"
+    "database/sql"
 
     "github.com/bwmarrin/discordgo"
-    "github.com/mattn/go-sqlite3"
+    _ "github.com/mattn/go-sqlite3"
 )
 
 const (
@@ -38,16 +39,17 @@ const (
     HELP_COMMAND    = "help"
     CONTACT_COMMAND = "contact"
 
-    // Matches words and quoted strings (ex. Godfather, "The Godfather")
-    //      "[^"]+"     matches 1+ substrings inside quotes
-    //      \S+         matches 1+ substrings separated by whitespaces
-    REGEX_PATTERN   = regexp.MustCompile(`("[^"]+"|\S+)`)
 )
 
+// Matches words and quoted strings (ex. Godfather, "The Godfather")
+//      "[^"]+"     matches 1+ substrings inside quotes
+//      \S+         matches 1+ substrings separated by whitespaces
+var REGEX_PATTERN = regexp.MustCompile(`("[^"]+"|\S+)`)
+
 // Main handler for the bot that will delegate to private handlers based on user input
-func MasterHandler(db *sql.DB, session *discordgo.Session, message *discordgo.MessageCreate) {
+func MasterHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
     // Ignore messages from self
-    if message.Author.ID == session.State.User.ID { return }
+    if m.Author.ID == s.State.User.ID { return }
 
     // Use regex to parse command and arguments from message
     args := REGEX_PATTERN.FindAllString(m.Content, -1)
@@ -57,19 +59,19 @@ func MasterHandler(db *sql.DB, session *discordgo.Session, message *discordgo.Me
     // Fire the correct handler based on given command
     switch args[1] {
         case ADD_COMMAND:
-            addHandler(db, session, message)
+            addHandler(db, s, m)
         case DELETE_COMMAND:
-            deleteHandler(db, session, message)
+            deleteHandler(db, s, m)
         case VIEW_COMMAND:
-            viewHandler(db, session, message)
+            viewHandler(db, s, m)
         case UPDATE_COMMAND:
-            updateHandler(db, session, message)
+            updateHandler(db, s, m)
         case HELP_COMMAND:
-            helpHandler(session, message)
+            helpHandler(s, m)
         case CONTACT_COMMAND:
-            contactHandler(session, message)
+            contactHandler(s, m)
         default:
-            helpHandler(session, message)
+            helpHandler(s, m)
     }
 }
 
@@ -89,7 +91,9 @@ func addHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
     if len(args) < 4 { return } // Ensure we have at least a title and category
 
     // Validate and extract fields from args
-    var title, category, link string
+    var title, link string
+    var category Category
+
     if len(args) >= 4 {
         title = args[2]
         category = Category(args[3])
@@ -110,7 +114,7 @@ func addHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 
     // Fetch watchlist and add entry to it
     watchlist := FetchWatchlist(db, m.Author.ID)
-    watchlist.Add(entry)
+    watchlist.Add(db, entry)
 
     // Send a confirmation message
     s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```AddHandler: %s```", watchlist))
@@ -129,11 +133,26 @@ func deleteHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate)
 
     // Get watchlist and search for entry to delete based on title
     watchlist := FetchWatchlist(db, m.Author.ID)
-    entry := watchlist.Get(args[2])
-    watchlist.Delete(entry)
+    entry := watchlist.Get(db, args[2])
+    watchlist.Delete(db, entry)
 
     // Send a confirmation message
     s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```DeleteHandler: %s```", watchlist))
+}
+
+// Updates an entry link in the watchlist, then sends a confirmation message
+// Usage:
+//      ./watchlist update <title> <new_link>
+// Example:
+//      ./watchlist update "The Godfather" "https://www.youtube.com/watch?v=UaVTIH8mujA"
+func updateHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
+    title := ""     // use regex to match titles in quotes with spaces
+    newLink := ""   // use regex to get new link
+
+    watchlist := FetchWatchlist(db, m.Author.ID)
+    entry := watchlist.Get(db, title)
+    watchlist.Update(db, entry, newLink)
+    s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```ViewHandler: %s```", watchlist))
 }
 
 // Displays the watchlist (sorted by position), then sends a confirmation message
@@ -162,16 +181,15 @@ func viewHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
     }
 
     // Fetch & sort watchlists
-    watchlist := FetchWatchlist(m.Author.ID)
+    watchlist := FetchWatchlist(db, m.Author.ID)
     watchlist.Sort(sort_by)
 
     // Convert watchlist entries into a list of embed fields
     var embedFields []*discordgo.MessageEmbedField
     for _, entry := range watchlist.Entries {
-        value := entry.Category.String())
         embedFields = append(embedFields, &discordgo.MessageEmbedField{
             Name: entry.Title,
-            Value: fmt.Sprintf("(%s) %s)", entry.Category.String(), entry.Link),
+            Value: fmt.Sprintf("(%s) %s)", entry.Category, entry.Link),
             Inline: true,
         })
     }
@@ -189,21 +207,6 @@ func viewHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
     s.ChannelMessageSendEmbed(m.ChannelID, embed)
 }
 
-// Updates an entry link in the watchlist, then sends a confirmation message
-// Usage:
-//      ./watchlist update <title> <new_link>
-// Example:
-//      ./watchlist update "The Godfather" "https://www.youtube.com/watch?v=UaVTIH8mujA"
-func updateHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
-    title := ""     // use regex to match titles in quotes with spaces
-    newLink := ""   // use regex to get new link
-
-    watchlist := FetchWatchlist(m.Author.ID)
-    entry := watchlist.Get(title)
-    watchlist.Update(entry, newLink)
-    s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```ViewHandler: %s```", watchlist))
-}
-
 // Displays the help message
 // Usage:
 //      ./watchlist help
@@ -211,7 +214,7 @@ func updateHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate)
 // Example:
 //      ./watchlist help
 //      ./watchlist help add
-func helpHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
+func helpHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
     // This will match all of the following cases
     //      ./watchlist help
@@ -242,6 +245,6 @@ func helpHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 // Displays the contact message
 // Usage:
 //      ./watchlist contact
-func contactHandler(s *discordgo.Session, m *disordgo.MessageCreate) {
+func contactHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
     s.ChannelMessageSend(m.ChannelID, "```For contact info, visit https://github.com/ttamre/go.watch```")
 }

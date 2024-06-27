@@ -23,6 +23,9 @@ import (
     "log"
     "sort"
     "strings"
+    "database/sql"
+
+    _ "github.com/mattn/go-sqlite3"
 )
 
 /* STRUCTS, ENUMS, CONSTANTS */
@@ -40,16 +43,6 @@ const (
 )
 
 
-/* CUSTOM ERROR TYPES */
-type WatchlistDoesntExistError struct {
-    message string
-}
-
-func (e *WatchlistDoesntExistError) Error() string {
-    return e.message
-}
-
-
 /* FUNCTIONS */
 
 // Fetch the watchlist from the database if exists, creates a new one otherwise
@@ -59,16 +52,32 @@ func FetchWatchlist(db *sql.DB, userID string) *Watchlist {
 
     // If an entry for the user exists, get it + all other entries
     if checkWatchlist(db, userID) {
-        watchlist.getEntries(db, userID)
+        watchlist.populate(db)
     }
 
     return watchlist
 }
 
-func (w *Watchlist) getEntries(db *sql.DB, userID string) *Watchlist {
+// Check if the watchlist exists in the database
+func checkWatchlist(db *sql.DB, userID string) bool {
+    var exists bool
+    query := "SELECT EXISTS(SELECT 1 FROM entries WHERE userID = ? LIMIT 1)"
+    err := db.QueryRow(query, userID).Scan(&exists)
+    if err != nil {
+        log.Fatalf("Failed to check if watchlist exists: %v", err)
+    }
+
+    return exists
+}
+
+
+/* CLASS METHODS */
+
+// Populate a watchlist with entries that match the watchlist's user ID
+func (w *Watchlist) populate(db *sql.DB) {
     // Get all entries from the database for the user
-    query := "SELECT * FROM entries WHERE userID = ?"
-    rows, err := db.Query(query, userID)
+    query := "SELECT (userID, title, category, date, link) FROM entries WHERE userID = ?"
+    rows, err := db.Query(query, w.UserID)
     if err != nil {
         log.Fatalf("Failed to get entries from database: %v", err)
     }
@@ -91,33 +100,13 @@ func (w *Watchlist) getEntries(db *sql.DB, userID string) *Watchlist {
     w.Entries = entries
 }
 
-// Check if the watchlist exists in the database
-func checkWatchlist(db *sql.DB, userID string) bool {
-    var exists bool
-    query := "SELECT EXISTS(SELECT 1 FROM entries WHERE userID = ? LIMIT 1)"
-    err := db.QueryRow(query, userID).Scan(&exists)
-    if err != nil {
-        log.Fatalf("Failed to check if watchlist exists: %v", err)
-    }
-
-    return exists
-}
-
-
-/* CLASS METHODS */
-
 // get entry from watchlist
-func (w *Watchlist) Get(title string) *Entry {
-    // sql -> SELECT * FROM entries WHERE userID = w.UserID AND title = title
-    for _, entry := range w.Entries {
-        if entry.Title == title {
-            return &entry
-        }
-    }
+func (w *Watchlist) Get(db *sql.DB, title string) *Entry {
+    return GetEntryFromDB(db, w.UserID, title)
 }
 
-// adds a new entry to the watchlist
-func (w *Watchlist) Add(e Entry) {
+// adds a new entry to the watchlist and database
+func (w *Watchlist) Add(db *sql.DB, e Entry) {
     // Validate the entry
     if err := e.IsValid(); err != nil {
         log.Fatal("Failed to add entry: %v", err)
@@ -127,34 +116,35 @@ func (w *Watchlist) Add(e Entry) {
     w.Entries = append(w.Entries, e)
 
     // Add the entry to the database
-    // sql -> INSERT INTO entries (userID, title, category, date, link)
-    //          VALUES e.UserID, e.Title, e.Category, e.Date, e.Link
+    e.Add(db)
 
     fmt.Println(w)
 }
 
 // deletes an entry from the watchlist
-func (w *Watchlist) Delete(e Entry) {
+func (w *Watchlist) Delete(db *sql.DB, e *Entry) {
     // Find the entry to remove
     for i, watchlistItem := range w.Entries {
-        if e == watchlistItem {
-            // Remove the entry from the watchlist
+        if e == &watchlistItem {
+            // Remove from watchlist
             w.Entries = append(w.Entries[:i], w.Entries[i+1:]...)
-            // sql -> DELETE FROM entries
-            // WHERE userID = e.UserID AND title = e.Title AND category = e.Category
+
+            // Remove from database
+            e.Delete(db)
+
             fmt.Println(w)
+            break
         }
     }
 }
 
 // Updates an entry's link in the watchlist
-func (w *Watchlist) Update(entry *Entry, newLink string) {
+func (w *Watchlist) Update(db *sql.DB, newEntry *Entry, newLink string) {
     // Find the entry to update
     for i, oldEntry := range w.Entries {
-        if newEntry == oldEntry {
-            w.Entries[i].UpdateLink(newLink)
-            // sql -> UPDATE entries SET link = newLink
-            // WHERE userID = e.UserID AND title = e.Title AND e.Category = e.Category
+        if newEntry == &oldEntry {
+            // Updates the entry + database
+            w.Entries[i].Update(db, newLink)
             fmt.Println(w)
         }
     }
@@ -168,7 +158,7 @@ func (w *Watchlist) Sort(sort_by Sort_by) {
     // the list will be unsorted if the option is invalid, so this is redundant
     // but it's good practice to validate user input
     if err := sort_by.IsValid(); err != nil {
-        log.War("Failed to sort watchlist: %v", err)
+        log.Fatalf("Failed to sort watchlist: %v", err)
     }
 
     // no default case means list will not be sorted if an invalid enum is provided
@@ -181,8 +171,7 @@ func (w *Watchlist) Sort(sort_by Sort_by) {
 
         case sort_by_date:
             sort.Slice(w.Entries, func(i, j int) bool {
-                return time.Parse(TIME_FORMAT, w.Entries[i].Date)
-                < time.Parse(TIME_FORMAT, w.Entries[j].Date)
+                return w.Entries[i].Date.Before(w.Entries[j].Date)
             })
 
         case sort_by_category:
@@ -200,7 +189,7 @@ func (w *Watchlist) String() string {
     watchlistString = strings.Repeat("-", len(watchlistString)) // dotted line under the title
 
     for _, e := range w.Entries {
-        watchlistString += fmt.Sprintf("\t(%d): %s (%s)\n", e.Position, e.Title, e.Category)
+        watchlistString += fmt.Sprintf("%s\n", e)
     }
     return watchlistString
 }

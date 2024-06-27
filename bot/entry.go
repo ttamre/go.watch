@@ -20,12 +20,13 @@ package bot
 
 import (
     "fmt"
-    "math/rand"
+    "time"
+    "reflect"
+    "log"
+    "database/sql"
 
-    "github.com/mattn/go-sqlite3"
+    _ "github.com/mattn/go-sqlite3"
 )
-
-const TIME_FORMAT = "2024-01-01 00:00:00"
 
 // Entry represents a single entry in the watchlist
 type Entry struct {
@@ -44,35 +45,58 @@ const (
     Anime   Category = "anime"
 )
 
+
 // Load the entry from the database
 func GetEntryFromDB(db *sql.DB, userID string, title string) *Entry {
-    // Load the entry from the database
-    // Return the entry
-    //
+
     var e Entry
-    err := db.QueryRow("SELECT userID, title, category, date, link" +
-                "FROM entries WHERE userID = ? and title = ?", userID, title)
-    err = err.Scan(&e.UserID, &e.Title, &e.Category, &e.Date, &e.Link)
+
+    query := "SELECT (userID, title, category, date, link) " +
+    "FROM entries WHERE userID = ? and title = ? LIMIT 1"
+
+    err := db.QueryRow(query, userID, title).Scan(&e.UserID, &e.Title, &e.Category, &e.Date, &e.Link)
     if err != nil {
         log.Fatalf("Failed to get entry from database: %v", err)
     }
 
     fmt.Printf("GetEntryFromDB: %s\n", e)
-    return e
+    return &e
 }
 
-func (e *Entry) UpdateLink(db *sql.DB, newLink string) {
+
+/* CLASS METHODS */
+
+// Adds an entry to the database
+func (e *Entry) Add(db *sql.DB) {
+    // Prepare insert statement
+    query := "INSERT INTO entries(userID, title, category, date, link) VALUES(?, ?, ?, ?, ?)"
+    statement, err := db.Prepare(query)
+    if err != nil {
+        log.Fatalf("Failed to prepare statement: %v", err)
+    }
+    defer statement.Close()
+
+    // Execute insert statement
+    _, err = statement.Exec(e.UserID, e.Title, e.Category, e.Date, e.Link)
+    if err != nil {
+        log.Fatalf("Failed to execute statement: %v", err)
+    }
+}
+
+// Updates the link for an entry
+func (e *Entry) Update(db *sql.DB, newLink string) {
     e.Link = newLink
 
     // Prepate update statement
-    statement, err := db.Prepare("UPDATE entries SET link = ? WHERE userID = ? and title = ? and category = ?")
+    query := "UPDATE entries SET link = ? WHERE userID = ? and title = ? and category = ?"
+    statement, err := db.Prepare(query)
     if err != nil {
         log.Fatalf("Failed to prepare statement: %v", err)
     }
     defer statement.Close()
 
     // Execute update statement
-    _, err = statement.Exec(e.Link, e.userID, e.Title, e.Category)
+    _, err = statement.Exec(e.Link, e.UserID, e.Title, e.Category)
     if err != nil {
         log.Fatalf("Failed to execute statement: %v", err)
     }
@@ -80,8 +104,26 @@ func (e *Entry) UpdateLink(db *sql.DB, newLink string) {
     fmt.Printf("Updated link for %s\n", e)
 }
 
+// Deletes the entry from the database
+func (e *Entry) Delete(db *sql.DB) {
+    // Prepare delete statement
+    statement, err := db.Prepare("DELETE FROM entries WHERE userID = ? and title = ? and category = ?")
+    if err != nil {
+        log.Fatalf("Failed to prepare statement: %v", err)
+    }
+    defer statement.Close()
 
-// Class methods
+    // Execute delete statement
+    _, err = statement.Exec(e.UserID, e.Title, e.Category)
+    if err != nil {
+        log.Fatalf("Failed to execute statement: %v", err)
+    }
+
+    fmt.Printf("Deleted entry: %s\n", e)
+}
+
+
+// Validator for category struct
 func (c Category) IsValid() error {
     switch c {
         case Movie, Show, Anime:
@@ -91,6 +133,7 @@ func (c Category) IsValid() error {
     }
 }
 
+// Validator for entry struct
 func (e *Entry) IsValid() error {
 
     if e.UserID == "" {
@@ -105,12 +148,18 @@ func (e *Entry) IsValid() error {
         return err
     }
 
-    if date, err := time.Parse(TIME_FORMAT, e.Date); err != nil {
+    if reflect.TypeOf(e.Date).String() != "time.Time" {
         return fmt.Errorf("invalid date: %s", e.Date)
     }
+
+    return nil
 }
 
+// Stringer for entry struct
 func (e *Entry) String() string {
-    return fmt.Sprintf("UserID: %s\nTitle: %s\nCategory: %s\nDate: %s\nLink: %s\n",
-                        e.UserID, e.Title, e.Category, e.Date, e.Link)
+    if e.Link != "" {
+        return fmt.Sprintf("&s (%s)\n%s\n", e.Title, e.Category, e.Link)
+    } else {
+        return fmt.Sprintf("&s (%s)\n", e.Title, e.Category)
+    }
 }

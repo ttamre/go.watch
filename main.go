@@ -23,9 +23,11 @@ import (
     "flag"
     "log"
     "os"
+    "database/sql"
 
-    "github.com/mattn/go-sqlite3"
+    _ "github.com/mattn/go-sqlite3"
     "github.com/bwmarrin/discordgo"
+
     "github.com/ttamre/go.watchlist/bot"
 )
 
@@ -44,14 +46,16 @@ func main() {
     }
 
     // Creating a database connection
-    db, err := sql.Open("sqlite3", db_file)
+    db, err := sql.Open("sqlite3", *db_file)
     if err != nil {
         log.Fatal(err)
     }
     defer db.Close()
 
     // Registering handlers
-    session.AddHandler(bot.MasterHandler)
+    session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+        bot.MasterHandler(db, s, m)
+    })
 
     // Open a websocket connection to Discord and begin listening.
     err = session.Open()
