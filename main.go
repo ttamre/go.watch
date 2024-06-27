@@ -16,24 +16,25 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+package main
+
 import (
     "fmt"
     "flag"
     "log"
     "os"
 
-    "github.com/go-redis/redis/v8"
+    "github.com/mattn/go-sqlite3"
     "github.com/bwmarrin/discordgo"
     "github.com/ttamre/go.watchlist/bot"
 )
 
+const DEFAULT_DB_PATH = "data/database.db"
+
 
 func main() {
     // Process command line flags
-    var (
-        redis_host = flag.String("host", "localhost", "Redis host")
-        redis_port = flag.String("port", "3001", "Redis port")
-    )
+    db_file := flag.String("database", DEFAULT_DB_PATH, "database file path")
     flag.Parse()
 
     // Creating a session to connect to discord server
@@ -43,19 +44,14 @@ func main() {
     }
 
     // Creating a database connection
-    rdb := redis.NewClient(&redis.Options{
-        Addr:       *redis_host + ":" + *redis_port,
-        Password:   "",
-        DB:         0,
+    db, err := sql.Open("sqlite3", db_file)
+    if err != nil {
+        log.Fatal(err)
     }
+    defer db.Close()
 
-    /*
-    session.AddHandler(bot.AddHandler(&rdb))
-    session.AddHandler(bot.DeleteHandler(&rdb))
-    session.AddHandler(bot.ViewHandler(&rdb))
-    session.AddHandler(bot.UpdateHandler(&rdb))
-    session.AddHandler(bot.HelpHandler(&rdb))
-    */
+    // Registering handlers
+    session.AddHandler(bot.MasterHandler)
 
     // Open a websocket connection to Discord and begin listening.
     err = session.Open()
@@ -63,8 +59,9 @@ func main() {
         fmt.Println("Error opening connection: ", err)
         return
     }
+    defer session.Close()
 
     // Simple way to keep program running until CTRL-C is pressed
-    fmt.Println("Bot is now running, press CTRL-C to exit...")
+    fmt.Println("bot is now running, press ctrl-c to exit...")
     <-make(chan struct{})
 }

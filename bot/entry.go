@@ -20,19 +20,20 @@ package bot
 
 import (
     "fmt"
-    "log"
+    "math/rand"
 
-    "github.com/bwmarrin/discordgo"
+    "github.com/mattn/go-sqlite3"
 )
 
+const TIME_FORMAT = "2024-01-01 00:00:00"
 
 // Entry represents a single entry in the watchlist
 type Entry struct {
-    Title       string
-    Category    Category
-    Position    int
-    Date        string
-    Link        string
+    UserID      string      `json:"user_id"`
+    Title       string      `json:"title"`
+    Category    Category    `json:"category"`
+    Date        time.Time   `json:"date"`
+    Link        string      `json:"link"`
 }
 
 // Category represents the type of item in the watchlist
@@ -43,39 +44,73 @@ const (
     Anime   Category = "anime"
 )
 
+// Load the entry from the database
+func GetEntryFromDB(db *sql.DB, userID string, title string) *Entry {
+    // Load the entry from the database
+    // Return the entry
+    //
+    var e Entry
+    err := db.QueryRow("SELECT userID, title, category, date, link" +
+                "FROM entries WHERE userID = ? and title = ?", userID, title)
+    err = err.Scan(&e.UserID, &e.Title, &e.Category, &e.Date, &e.Link)
+    if err != nil {
+        log.Fatalf("Failed to get entry from database: %v", err)
+    }
 
-// Update methods for entry struct
-func (e *Entry) UpdateTitle(newTitle string) {
-    e.Title = newTitle
+    fmt.Printf("GetEntryFromDB: %s\n", e)
+    return e
 }
 
-func (e *Entry) UpdateCategory(newCategory Category) {
-    e.Category = newCategory
-}
-
-func (e *Entry) UpdatePosition(newPosition int) {
-    e.Position = newPosition
-}
-
-func (e *Entry) UpdateLink(newLink string) {
+func (e *Entry) UpdateLink(db *sql.DB, newLink string) {
     e.Link = newLink
+
+    // Prepate update statement
+    statement, err := db.Prepare("UPDATE entries SET link = ? WHERE userID = ? and title = ? and category = ?")
+    if err != nil {
+        log.Fatalf("Failed to prepare statement: %v", err)
+    }
+    defer statement.Close()
+
+    // Execute update statement
+    _, err = statement.Exec(e.Link, e.userID, e.Title, e.Category)
+    if err != nil {
+        log.Fatalf("Failed to execute statement: %v", err)
+    }
+
+    fmt.Printf("Updated link for %s\n", e)
 }
 
 
-/* VALIDATION FUNCTONS */
-
-func (c *Category) IsValid() error {
-    switch c:
+// Class methods
+func (c Category) IsValid() error {
+    switch c {
         case Movie, Show, Anime:
             return nil
         default:
             return fmt.Errorf("invalid category: %s", c)
+    }
 }
 
-
 func (e *Entry) IsValid() error {
-    if e.Position < 0 {
-        return fmt.Errorf("invalid position: %d", e.Position)
+
+    if e.UserID == "" {
+        return fmt.Errorf("user_id is empty")
     }
-    return e.Category.IsValid()
+
+    if e.Title == "" {
+        return fmt.Errorf("title is empty")
+    }
+
+    if err := e.Category.IsValid(); err != nil {
+        return err
+    }
+
+    if date, err := time.Parse(TIME_FORMAT, e.Date); err != nil {
+        return fmt.Errorf("invalid date: %s", e.Date)
+    }
+}
+
+func (e *Entry) String() string {
+    return fmt.Sprintf("UserID: %s\nTitle: %s\nCategory: %s\nDate: %s\nLink: %s\n",
+                        e.UserID, e.Title, e.Category, e.Date, e.Link)
 }
