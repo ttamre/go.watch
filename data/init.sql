@@ -1,5 +1,5 @@
 /*
-go.watchlist - a watchlist manager discord bot
+watchlist - a watchlist manager discord bot
 Copyright (C) 2024 Tem Tamre
 
 This program is free software: you can redistribute it and/or modify

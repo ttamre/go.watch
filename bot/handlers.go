@@ -39,6 +39,11 @@ const (
 	UPDATE_COMMAND  = "update"
 	HELP_COMMAND    = "help"
 	CONTACT_COMMAND = "contact"
+
+	// possible new features
+	// LETTERBOXD_COMMAND 	= "letterboxd"	// random movie from letterboxd list
+	// IMDB_COMMAND 		= "imdb"		// random movie from imdb list
+	// MAL_COMMAND 			= "mal"			// random anime from myanimelist list
 )
 
 // Matches words and quoted strings (ex. Godfather, "The Godfather")

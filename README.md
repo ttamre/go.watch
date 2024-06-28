@@ -1,4 +1,4 @@
-<h1 style="font-family:monospace">GO.WATCH</h1>
+<h1 style="font-family:monospace">watchlist</h1>
 <div style="padding-bottom:20px">
     <img src="https://img.shields.io/badge/go-1.22.0-blue" />
     <img src="https://img.shields.io/badge/sqlite-3.32.3-grey" />
@@ -7,11 +7,11 @@
 
 <!-- DESCRIPTION -->
 <h2 style="font-family:monospace">Description</h2>
-<p style="font-family:monospace">A watchlist manager discord bot, written in Go + Sqlite3<br></p>
+<p style="font-family:monospace">A watchlist manager discord bot, written in go + sqlite3<br></p>
 
 <!-- INSTALLATION -->
 <h2 style="font-family:monospace">Installation</h2>
-`git clone https://github.com/ttamre/go.watch.git`
+`git clone https://github.com/ttamre/watchlist.git`
 
 <!-- USAGE -->
 <h2 style="font-family:monospace">Usage</h2>

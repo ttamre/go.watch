@@ -1,4 +1,4 @@
-module github.com/ttamre/go.watchlist
+module github.com/ttamre/watchlist
 
 go 1.22.0
 

@@ -1,5 +1,5 @@
 /*
-go.watchlist - a watchlist manager discord bot
+watchlist - a watchlist manager discord bot
 Copyright (C) 2024 Tem Tamre
 
 This program is free software: you can redistribute it and/or modify
@@ -28,7 +28,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/ttamre/go.watchlist/bot"
+	"github.com/ttamre/watchlist/bot"
 )
 
 const DEFAULT_DB_PATH = "data/database.db"

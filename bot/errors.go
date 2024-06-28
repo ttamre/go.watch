@@ -1,5 +1,5 @@
 /*
-go.watchlist - a watchlist manager discord bot
+watchlist - a watchlist manager discord bot
 Copyright (C) 2024 Tem Tamre
 
 This program is free software: you can redistribute it and/or modify
@@ -37,7 +37,7 @@ type InvalidCategoryError struct {
 }
 
 type InvalidTimestampError struct {
-	Time string
+	time string
 }
 
 type InvalidSortByError struct {
@@ -69,7 +69,7 @@ func (e *InvalidCategoryError) Error() string {
 }
 
 func (e *InvalidTimestampError) Error() string {
-	return fmt.Sprintf("Invalid timestamp: %s", e.Time)
+	return fmt.Sprintf("Invalid timestamp: %s", e.time)
 }
 
 func (e *InvalidSortByError) Error() string {

@@ -6,7 +6,6 @@ GOTEST 	= $(GOCMD) test
 GOBUILD = $(GOCMD) build
 
 # Filepaths
-TEMP_FOLDER		= tmp
 TEST_FOLDER 	= test
 BUILD_FOLDER	= bin
 COVER_PKG 		= bot
@@ -21,7 +20,7 @@ default: clean deps build
 # Clean target
 clean:
 	@$(GOCLEAN)
-	@rm -rf $(BUILD_FOLDER) $(TEMP_FOLDER)
+	@rm -rf $(BUILD_FOLDER)
 
 # Install dependencies
 deps:
