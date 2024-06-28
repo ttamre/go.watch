@@ -19,232 +19,322 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package bot
 
 import (
-    "fmt"
-    "strings"
-    "time"
-    "regexp"
-    "database/sql"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"regexp"
+	"strings"
+	"time"
 
-    "github.com/bwmarrin/discordgo"
-    _ "github.com/mattn/go-sqlite3"
+	"github.com/bwmarrin/discordgo"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-    // Commands that the user will use to interact with the bot
-    ENTRYPOINT      = "./watchlist"
-    ADD_COMMAND     = "add"
-    DELETE_COMMAND  = "delete"
-    VIEW_COMMAND    = "view"
-    UPDATE_COMMAND  = "update"
-    HELP_COMMAND    = "help"
-    CONTACT_COMMAND = "contact"
-
+	// Commands that the user will use to interact with the bot
+	ENTRYPOINT      = "./watchlist"
+	ADD_COMMAND     = "add"
+	DELETE_COMMAND  = "delete"
+	VIEW_COMMAND    = "view"
+	UPDATE_COMMAND  = "update"
+	HELP_COMMAND    = "help"
+	CONTACT_COMMAND = "contact"
 )
 
 // Matches words and quoted strings (ex. Godfather, "The Godfather")
-//      "[^"]+"     matches 1+ substrings inside quotes
-//      \S+         matches 1+ substrings separated by whitespaces
+//
+//	"[^"]+"     matches 1+ substrings inside quotes
+//	\S+         matches 1+ substrings separated by whitespaces
 var REGEX_PATTERN = regexp.MustCompile(`("[^"]+"|\S+)`)
 
 // Main handler for the bot that will delegate to private handlers based on user input
 func MasterHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
-    // Ignore messages from self
-    if m.Author.ID == s.State.User.ID { return }
+	// Ignore messages from self
+	if m.Author.ID == s.State.User.ID {
+		return
+	}
 
-    // Use regex to parse command and arguments from message
-    args := REGEX_PATTERN.FindAllString(m.Content, -1)
-    if len(args) < 2 { return }         // Ignore messages without commands
-    if args[0] != ENTRYPOINT { return } // Ignore messages not addressed to us
+	// Use regex to parse command and arguments from message
+	args := REGEX_PATTERN.FindAllString(m.Content, -1)
 
-    // Fire the correct handler based on given command
-    switch args[1] {
-        case ADD_COMMAND:
-            addHandler(db, s, m)
-        case DELETE_COMMAND:
-            deleteHandler(db, s, m)
-        case VIEW_COMMAND:
-            viewHandler(db, s, m)
-        case UPDATE_COMMAND:
-            updateHandler(db, s, m)
-        case HELP_COMMAND:
-            helpHandler(s, m)
-        case CONTACT_COMMAND:
-            contactHandler(s, m)
-        default:
-            helpHandler(s, m)
-    }
+	// Send help to messages without commands
+	if len(args) < 2 {
+		helpHandler(s, m)
+	}
+
+	// Ignore messages not addressed to us
+	if args[0] != ENTRYPOINT {
+		return
+	}
+
+	// Fire the correct handler based on given command
+	switch args[1] {
+	case ADD_COMMAND:
+		addHandler(db, s, m)
+	case DELETE_COMMAND:
+		deleteHandler(db, s, m)
+	case VIEW_COMMAND:
+		viewHandler(db, s, m)
+	case UPDATE_COMMAND:
+		updateHandler(db, s, m)
+	case HELP_COMMAND:
+		helpHandler(s, m)
+	case CONTACT_COMMAND:
+		contactHandler(s, m)
+	default:
+		helpHandler(s, m)
+	}
 }
-
 
 /* PRIVATE FUNCTIONS */
 
 // Creates an entry and adds it to the watchlist, then sends a confirmation message
 // Usage:
-//      ./watchlist add <title> <category> <link?>
+//
+//	./watchlist add <title> <category> <link?>
+//
 // Example:
-//      ./watchlist add "The Godfather" movie
-//      ./watchlist add "The Godfather" movie "https://www.imdb.com/title/tt0133093/"
+//
+//	./watchlist add "The Godfather" movie
+//	./watchlist add "The Godfather" movie "https://www.imdb.com/title/tt0133093/"
 func addHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 
-    // Use regex to parse args from message
-    args := REGEX_PATTERN.FindAllString(m.Content, -1)
-    if len(args) < 4 { return } // Ensure we have at least a title and category
+	// Use regex to parse args from message
+	args := REGEX_PATTERN.FindAllString(m.Content, -1)
+	if len(args) < 4 {
+		slog.Error("handlers.AddHandler", "msg", NotEnoughArgumentsError{m.Content})
+		return
+	} // Ensure we have at least a title and category
 
-    // Validate and extract fields from args
-    var title, link string
-    var category Category
+	// Validate and extract fields from args
+	var title, link string
+	var category Category
 
-    if len(args) >= 4 {
-        title = args[2]
-        category = Category(args[3])
-    }
+	if len(args) >= 4 {
+		title = args[2]
+		category = Category(args[3])
+	}
 
-    if len(args) == 5 {
-        link = args[4]
-    }
+	if len(args) == 5 {
+		link = args[4]
+	}
 
-    // Create entry using validated fields
-    entry := Entry{
-        UserID:     m.Author.ID,
-        Title:      title,
-        Category:   category,
-        Date:       time.Now(),
-        Link:       link,
-    }
+	// Create entry using validated fields
+	entry := &Entry{
+		UserID:   m.Author.ID,
+		Title:    title,
+		Category: category,
+		Date:     time.Now(),
+		Link:     link,
+	}
 
-    // Fetch watchlist and add entry to it
-    watchlist := FetchWatchlist(db, m.Author.ID)
-    watchlist.Add(db, entry)
+	// Fetch watchlist from database
+	watchlist, err := FetchWatchlist(db, m.Author.ID)
+	if err != nil {
+		slog.Error("handlers.AddHandler", "msg", err)
+	}
 
-    // Send a confirmation message
-    s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```AddHandler: %s```", watchlist))
+	// Add entry to watchlist & database
+	err = watchlist.Add(db, entry)
+	if err != nil {
+		slog.Error("handlers.AddHandler", "msg", err)
+	}
+
+	// Log and send a confirmation message
+	slog.Info("handlers.AddHandler", "user", m.Author.Username, "entry", entry)
+	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```added %s to your watchlist```", entry.Title))
 }
 
 // Deletes an entry from the watchlist, then sends a confirmation message
 // Usage:
-//     ./watchlist remove <title>
+//
+//	./watchlist remove <title>
+//	./watchlist remove <title> <category>
+//
 // Example:
-//      ./watchlist remove "The Godfather"
+//
+//	./watchlist remove "The Godfather"
+//	./watchlist remove "The Godfather" movie
 func deleteHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 
-    // Use regex to parse args from message
-    args := REGEX_PATTERN.FindAllString(m.Content, -1)
-    if len(args) < 3 { return }
+	// Use regex to parse args from message
+	args := REGEX_PATTERN.FindAllString(m.Content, -1)
+	if len(args) < 3 {
+		return
+	}
 
-    // Get watchlist and search for entry to delete based on title
-    watchlist := FetchWatchlist(db, m.Author.ID)
-    entry := watchlist.Get(db, args[2])
-    watchlist.Delete(db, entry)
+	title := args[2]
+	var category Category
+	if len(args) >= 4 {
+		category = Category(args[3])
+	}
 
-    // Send a confirmation message
-    s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```DeleteHandler: %s```", watchlist))
+	// TODO skip FETCH, just DELETE from database we don't need any structs at all
+	watchlist, err := FetchWatchlist(db, m.Author.ID)
+	if err != nil {
+		slog.Error("handlers.DeleteHandler", "msg", err)
+	}
+
+	// Delete entry from watchlist
+	err = watchlist.Delete(db, m.Author.ID, title, category)
+	if err != nil {
+		slog.Error("handlers.DeleteHandler", "msg", err)
+	}
+
+	// Log and send a confirmation message
+	slog.Info("handlers.DeleteHandler", "user", m.Author.Username, "entry.Title", title)
+	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```deleted %s from your watchlist```", title))
 }
 
 // Updates an entry link in the watchlist, then sends a confirmation message
 // Usage:
-//      ./watchlist update <title> <new_link>
+//
+//	./watchlist update <title> <new_link>
+//	./watchlist update <title> <category> <new_link>
+//
 // Example:
-//      ./watchlist update "The Godfather" "https://www.youtube.com/watch?v=UaVTIH8mujA"
+//
+//	./watchlist update "The Godfather" https://www.youtube.com/watch?v=UaVTIH8mujA
+//	./watchlist update "The Godfather" movie https://www.youtube.com/watch?v=UaVTIH8mujA
 func updateHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
-    title := ""     // use regex to match titles in quotes with spaces
-    newLink := ""   // use regex to get new link
 
-    watchlist := FetchWatchlist(db, m.Author.ID)
-    entry := watchlist.Get(db, title)
-    watchlist.Update(db, entry, newLink)
-    s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```ViewHandler: %s```", watchlist))
+	// Use regex to parse args from message
+	args := REGEX_PATTERN.FindAllString(m.Content, -1)
+	if len(args) < 4 {
+		slog.Error("handlers.UpdateHandler", "msg", NotEnoughArgumentsError{m.Content})
+		return
+	} // Ensure we have at least a title and category
+
+	// Validate and extract fields from args
+	var title, newLink string
+	var category Category
+
+	if len(args) == 4 {
+		title = args[2]
+		newLink = args[3]
+	}
+
+	if len(args) >= 5 {
+		title = args[2]
+		category = Category(args[3])
+		newLink = args[4]
+	}
+
+	// TODO skip FETCH, just UPDATE from database we don't need any structs at all
+	watchlist, err := FetchWatchlist(db, m.Author.ID)
+	if err != nil {
+		slog.Error("handlers.UpdateHandler", "msg", err)
+	}
+
+	// Update database
+	err = watchlist.Update(db, m.Author.ID, title, category, newLink)
+	if err != nil {
+		slog.Error("handlers.UpdateHandler", "msg", err)
+	}
+
+	// Log and send a confirmation message
+	slog.Info("handlers.UpdateHandler", "user", m.Author.Username, "entry.Title", title)
+	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```updated %s -> %s```", title, newLink))
 }
 
 // Displays the watchlist (sorted by position), then sends a confirmation message
 // Usage:
-//      ./watchlist view <sort_by?>
+//
+//	./watchlist view <sort_by?>
+//
 // Example:
-//      ./watchlist view
-//      ./watchlist view title
-//      ./watchlist view date
-//      ./watchlist view category
+//
+//	./watchlist view
+//	./watchlist view title
+//	./watchlist view date
+//	./watchlist view category
 func viewHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 
-    // use defined regex pattern to parse sort_by from message
-    sort_string := "date"
-    var sort_by Sort_by
+	args := REGEX_PATTERN.FindAllString(m.Content, -1)
+	var sort_by Sort_by
+	if len(args) >= 3 {
+		sort_by = Sort_by(args[2])
+	}
 
-    switch sort_string {
-        case "title":
-            sort_by = sort_by_title
-        case "date":
-            sort_by = sort_by_date
-        case "category":
-            sort_by = sort_by_category
-        default:
-            sort_by = sort_by_date
-    }
+	// Fetch & sort watchlists
+	watchlist, err := FetchWatchlist(db, m.Author.ID)
+	if err != nil {
+		slog.Error("handlers.ViewHandler", "msg", err)
+	}
 
-    // Fetch & sort watchlists
-    watchlist := FetchWatchlist(db, m.Author.ID)
-    watchlist.Sort(sort_by)
+	watchlist.Sort(sort_by)
 
-    // Convert watchlist entries into a list of embed fields
-    var embedFields []*discordgo.MessageEmbedField
-    for _, entry := range watchlist.Entries {
-        embedFields = append(embedFields, &discordgo.MessageEmbedField{
-            Name: entry.Title,
-            Value: fmt.Sprintf("(%s) %s)", entry.Category, entry.Link),
-            Inline: true,
-        })
-    }
+	// Convert watchlist entries into a list of embed fields
+	var embedFields []*discordgo.MessageEmbedField
+	for _, entry := range watchlist.Entries {
+		embedFields = append(embedFields, &discordgo.MessageEmbedField{
+			Name:   entry.Title,
+			Value:  fmt.Sprintf("(%s) %s)", entry.Category, entry.Link),
+			Inline: true,
+		})
+	}
 
-    // Create a thumbnail using the author's avatar
-    thumbnail := &discordgo.MessageEmbedThumbnail{
-        URL: m.Author.AvatarURL(""), // empty string for default avatar size
-    }
+	// Create a thumbnail using the author's avatar
+	thumbnail := &discordgo.MessageEmbedThumbnail{
+		URL: m.Author.AvatarURL(""), // empty string for default avatar size
+	}
 
-    // Create and send embedded message
-    embed := &discordgo.MessageEmbed{
-        Fields: embedFields,
-        Thumbnail: thumbnail,
-    }
-    s.ChannelMessageSendEmbed(m.ChannelID, embed)
+	// Create and send embedded message
+	embed := &discordgo.MessageEmbed{
+		Fields:    embedFields,
+		Thumbnail: thumbnail,
+	}
+
+	// Log and send watchlist
+	slog.Info("handlers.ViewHandler", "user", m.Author.Username, "sort_by", sort_by, "watchlist", watchlist)
+	s.ChannelMessageSendEmbed(m.ChannelID, embed)
 }
 
 // Displays the help message
 // Usage:
-//      ./watchlist help
-//      ./watchlist help <command>
+//
+//	./watchlist help
+//	./watchlist help <command>
+//
 // Example:
-//      ./watchlist help
-//      ./watchlist help add
+//
+//	./watchlist help
+//	./watchlist help add
 func helpHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
-    // This will match all of the following cases
-    //      ./watchlist help
-    //      ./watchlist help <COMMAND>
-    //      ./watchlist <COMMAND> help
-    addMessage      := "Adding a movie to your watchlist:\n```./watchlist add <title> <category> <position(optional)> <link(optional)>```\n"
-    delMessage      := "Deleting a movie from your watchlist:\n```./watchlist remove <title>```\n"
-    viewMessage     := "Viewing your watchlist:\n```./watchlist view\n./watchlist view title\n./watchlist view category\n./watchlist view date```\n"
-    updateMessage   := "Updating a movie in your watchlist:\n```./watchlist update <title> <new_link>```\n"
-    helpMessage     := "Displaying this help message:\n```./watchlist help\n./watchlist help <command>```\n"
+	// This will match all of the following cases
+	//      ./watchlist help
+	//      ./watchlist help <COMMAND>
+	//      ./watchlist <COMMAND> help
+	addMessage := "Adding a movie to your watchlist:\n```./watchlist add <title> <category> <position(optional)> <link(optional)>```\n"
+	delMessage := "Deleting a movie from your watchlist:\n```./watchlist remove <title>```\n"
+	viewMessage := "Viewing your watchlist:\n```./watchlist view\n./watchlist view title\n./watchlist view category\n./watchlist view date```\n"
+	updateMessage := "Updating a movie in your watchlist:\n```./watchlist update <title> <new_link>```\n"
+	helpMessage := "Displaying this help message:\n```./watchlist help\n./watchlist help <command>```\n"
 
-    // If the user's help request is more specific, display the relevant help message'
-    if strings.Contains(m.Content, ADD_COMMAND) {
-        s.ChannelMessageSend(m.ChannelID, addMessage)
-    } else if strings.Contains(m.Content, DELETE_COMMAND) {
-        s.ChannelMessageSend(m.ChannelID, delMessage)
-    } else if strings.Contains(m.Content, VIEW_COMMAND) {
-        s.ChannelMessageSend(m.ChannelID, viewMessage)
-    } else if strings.Contains(m.Content, UPDATE_COMMAND) {
-        s.ChannelMessageSend(m.ChannelID, updateMessage)
+	slog.Info("HelpHandler", "user", m.Author.Username)
 
-    // If not, display all help messages
-    } else {
-        s.ChannelMessageSend(m.ChannelID, addMessage + delMessage + viewMessage + updateMessage + helpMessage)
-    }
+	// If the user's help request is more specific, display the relevant help message'
+	if strings.Contains(m.Content, ADD_COMMAND) {
+		s.ChannelMessageSend(m.ChannelID, addMessage)
+	} else if strings.Contains(m.Content, DELETE_COMMAND) {
+		s.ChannelMessageSend(m.ChannelID, delMessage)
+	} else if strings.Contains(m.Content, VIEW_COMMAND) {
+		s.ChannelMessageSend(m.ChannelID, viewMessage)
+	} else if strings.Contains(m.Content, UPDATE_COMMAND) {
+		s.ChannelMessageSend(m.ChannelID, updateMessage)
+
+		// If not, display all help messages
+	} else {
+		s.ChannelMessageSend(m.ChannelID, addMessage+delMessage+viewMessage+updateMessage+helpMessage)
+	}
 }
 
 // Displays the contact message
 // Usage:
-//      ./watchlist contact
+//
+//	./watchlist contact
 func contactHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
-    s.ChannelMessageSend(m.ChannelID, "```For contact info, visit https://github.com/ttamre/go.watch```")
+	slog.Info("handlers.ContactHandler", "user", m.Author.Username)
+	s.ChannelMessageSend(m.ChannelID, "https://github.com/ttamre/go.watch")
 }
