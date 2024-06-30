@@ -160,13 +160,13 @@ Deletes an entry from the watchlist, then sends a confirmation message
 
 Usage:
 
-	./watchlist remove <title>
-	./watchlist remove <title> <category>
+	./watchlist delete <title>
+	./watchlist delete <title> <category>
 
 Example:
 
-	./watchlist remove "The Godfather"
-	./watchlist remove "The Godfather" movie
+	./watchlist delete "The Godfather"
+	./watchlist delete "The Godfather" movie
 */
 func deleteHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 
