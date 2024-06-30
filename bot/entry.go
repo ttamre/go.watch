@@ -31,9 +31,11 @@ import (
 // Entry represents a single entry in the watchlist
 type Entry struct {
 	UserID   string    `json:"user_id"`
+	Date     time.Time `json:"date"`
 	Title    string    `json:"title"`
 	Category Category  `json:"category"`
-	Date     time.Time `json:"date"`
+	Done     bool      `json:"done"`
+	Rating   int       `json:"rating"`
 	Link     string    `json:"link"`
 }
 
@@ -46,29 +48,10 @@ const (
 	Anime Category = "anime"
 )
 
-// Load the entry from the database
-func GetEntryFromDB(db *sql.DB, userID string, title string) (*Entry, error) {
-
-	var e Entry
-
-	query := "SELECT (userID, title, category, date, link) " +
-		"FROM entries WHERE userID = ? and title = ? LIMIT 1"
-
-	err := db.QueryRow(query, userID, title).Scan(&e.UserID, &e.Title, &e.Category, &e.Date, &e.Link)
-	if err != nil {
-		return nil, err
-	}
-
-	slog.Debug("entry.GetEntryFromDB", "entry", e)
-	return &e, nil
-}
-
-/* CLASS METHODS */
-
 // Adds an entry to the database
 func (e *Entry) Add(db *sql.DB) error {
 	// Prepare insert statement
-	query := "INSERT INTO entries(userID, title, category, date, link) VALUES(?, ?, ?, ?, ?)"
+	query := "INSERT INTO entries(userID, date, title, category, done, rating, link) VALUES(?, ?, ?, ?, ?)"
 	statement, err := db.Prepare(query)
 	if err != nil {
 		return err
@@ -76,7 +59,7 @@ func (e *Entry) Add(db *sql.DB) error {
 	defer statement.Close()
 
 	// Execute insert statement
-	_, err = statement.Exec(e.UserID, e.Title, e.Category, e.Date, e.Link)
+	_, err = statement.Exec(e.UserID, e.Date, e.Title, e.Category, e.Done, e.Rating, e.Link)
 	if err != nil {
 		return err
 	}
@@ -85,8 +68,15 @@ func (e *Entry) Add(db *sql.DB) error {
 	return nil
 }
 
-// Deletes the entry from the database
-func (e *Entry) Delete(db *sql.DB) error {
+/*
+Delete an entry from the database
+
+Params:
+
+	db:		ptr to sqlite3 database connection
+	userID:	user ID of the entry
+*/
+func DeleteEntry(db *sql.DB, userID string, title string, category Category) error {
 	// Prepare delete statement
 	statement, err := db.Prepare("DELETE FROM entries WHERE userID = ? and title = ? and category = ?")
 	if err != nil {
@@ -95,18 +85,31 @@ func (e *Entry) Delete(db *sql.DB) error {
 	defer statement.Close()
 
 	// Execute delete statement
-	_, err = statement.Exec(e.UserID, e.Title, e.Category)
+	_, err = statement.Exec(userID, title, category)
 	if err != nil {
 		return err
 	}
 
-	slog.Debug("entry.Delete", "entry", e)
+	slog.Debug("entry.DeleteEntry", "user", userID, "title", title, "category", category)
 	return nil
 }
 
-// Updates the link for an entry and applies changes to database
-func (e *Entry) Update(db *sql.DB, newLink string) error {
-	e.Link = newLink
+/*
+Updates the link for an entry in the database
+
+Params:
+
+	db:			ptr to sqlite3 database connection
+	userID:		user ID of the entry
+	title:		title of the entry
+	category:	category of the entry
+	newLink:	new link to update the entry with
+
+Returns:
+
+	error:	error object
+*/
+func UpdateEntry(db *sql.DB, userID string, title string, category Category, newLink string) error {
 
 	// Prepate update statement
 	query := "UPDATE entries SET link = ? WHERE userID = ? and title = ? and category = ?"
@@ -117,12 +120,77 @@ func (e *Entry) Update(db *sql.DB, newLink string) error {
 	defer statement.Close()
 
 	// Execute update statement
-	_, err = statement.Exec(e.Link, e.UserID, e.Title, e.Category)
+	_, err = statement.Exec(newLink, userID, title, category)
 	if err != nil {
 		return err
 	}
 
-	slog.Debug("entry.Update", "entry", e)
+	slog.Debug("entry.UpdateEntry", "user", userID, "title", title, "category", category, "newLink", newLink)
+	return nil
+}
+
+/*
+Mark an entry as completed in the database
+
+Params:
+
+	db:			ptr to sqlite3 database connection
+	userID:		user ID of the entry
+	title:		title of the entry
+	category:	category of the entry
+
+Returns:
+
+	error:	error object
+*/
+func DoneEntry(db *sql.DB, userID string, title string, category Category) error {
+	// Prepare update statement
+	query := "UPDATE entries SET done = 1 WHERE userID = ? and title = ? and category = ?"
+	statement, err := db.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer statement.Close()
+
+	_, err = statement.Exec(userID, title, category)
+	if err != nil {
+		return err
+	}
+
+	slog.Debug("entry.DoneEntry", "user", userID, "title", title, "category", category)
+	return nil
+}
+
+/*
+Rate an entry in the database
+
+Params:
+
+	db:			ptr to sqlite3 database connection
+	userID:		user ID of the entry
+	title:		title of the entry
+	category:	category of the entry
+	rating:		rating to update the entry with
+
+Returns:
+
+	error:	error object
+*/
+func RateEntry(db *sql.DB, userID string, title string, category Category, rating int) error {
+	// Prepare update statement
+	query := "UPDATE entries SET rating = ? WHERE userID = ? and title = ? and category = ?"
+	statement, err := db.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer statement.Close()
+
+	_, err = statement.Exec(rating, userID, title, category)
+	if err != nil {
+		return err
+	}
+
+	slog.Debug("entry.RateEntry", "user", userID, "title", title, "category", category, "rating", rating)
 	return nil
 }
 

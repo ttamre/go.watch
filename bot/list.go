@@ -28,42 +28,61 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-/* STRUCTS, ENUMS, CONSTANTS */
 type Watchlist struct {
 	UserID  string   `json:"user_id"`
 	Entries []*Entry `json:"entries"`
 }
 
-type Sort_by string
+type SortBy string
 
 const (
 	// Enumerations for sorting the watchlist with the view command
-	sortTitle    Sort_by = "title"
-	sortDate     Sort_by = "date"
-	sortCategory Sort_by = "category"
+	SORT_TITLE    SortBy = "title"
+	SORT_DATE     SortBy = "date"
+	SORT_CATEGORY SortBy = "category"
 )
 
-/* FUNCTIONS */
+/*
+Fetch watchlist from the database if it exists
 
-// Fetch watchlist from the database if exists, creates a new one otherwise
-func FetchWatchlist(db *sql.DB, userID string) (*Watchlist, error) {
-	// Create an empty watchlist
-	watchlist := &Watchlist{UserID: userID}
+Params:
+
+	db: 		ptr to sqlite3 database connection
+	userID: 	user ID we are searching for entries for
+	watched:	true if we want all entries, false if we want only unwatched entries
+
+Returns:
+
+	*Watchlist: 	ptr to watchlist object
+	error:			error object
+*/
+func FetchWatchlist(db *sql.DB, userID string, watched bool) (*Watchlist, error) {
+
+	var watchlist *Watchlist
 
 	// If an entry for the user exists, get it + all other entries
 	exists, err := checkWatchlist(db, userID)
-
-	if err != nil {
-		return watchlist, err
-	}
-
 	if exists {
-		err = watchlist.populate(db)
+		watchlist := &Watchlist{UserID: userID}
+		err = watchlist.populate(db, watched)
 	}
+
 	return watchlist, err
 }
 
-// Check if the watchlist exists in the database
+/*
+Check if the watchlist exists in the database
+
+Params:
+
+	db: 		ptr to sqlite3 database connection
+	userID: 	user ID we are searching for entries for
+
+Returns:
+
+	bool:		true if the watchlist exists, false otherwise
+	error:		error object
+*/
 func checkWatchlist(db *sql.DB, userID string) (bool, error) {
 	exists := false
 	query := "SELECT EXISTS(SELECT 1 FROM entries WHERE userID = ? LIMIT 1)"
@@ -71,12 +90,26 @@ func checkWatchlist(db *sql.DB, userID string) (bool, error) {
 	return exists, err
 }
 
-/* CLASS METHODS */
+/*
+Populate a watchlist with entries that match the watchlist's user ID
 
-// Populate a watchlist with entries that match the watchlist's user ID
-func (w *Watchlist) populate(db *sql.DB) error {
+Params:
+
+	db: 		ptr to sqlite3 database connection
+	watched:	true if we want all entries, false if we want only unwatched entries
+
+Returns:
+
+	error:		error object
+*/
+func (w *Watchlist) populate(db *sql.DB, watched bool) error {
 	// Get all entries from the database for the user
-	query := "SELECT (userID, title, category, date, link) FROM entries WHERE userID = ?"
+	query := "SELECT (userID, date, title, category, done, rating, link) " +
+		"FROM entries WHERE userID = ?"
+
+	if !watched {
+		query += " AND done = 0"
+	}
 
 	rows, err := db.Query(query, w.UserID)
 	if err != nil {
@@ -100,85 +133,14 @@ func (w *Watchlist) populate(db *sql.DB) error {
 	return nil
 }
 
-// get entry from watchlist
-func (w *Watchlist) Get(db *sql.DB, title string) (*Entry, error) {
-	return GetEntryFromDB(db, w.UserID, title)
+/*
+Sort the watchlist by the provided sort_by option
 
-}
+Params:
 
-// adds a new entry to the watchlist and database
-func (w *Watchlist) Add(db *sql.DB, e *Entry) error {
-	// Validate the entry
-	if err := e.IsValid(); err != nil {
-		return err
-	}
-
-	// Add the entry to the watchlist
-	w.Entries = append(w.Entries, e)
-
-	// Add the entry to the database
-	err := e.Add(db)
-	if err != nil {
-		return err
-	}
-
-	slog.Debug("watchlist.Add", "watchlist", w)
-	return nil
-}
-
-// deletes an entry from the watchlist
-func (w *Watchlist) Delete(db *sql.DB, userID string, title string, category Category) error {
-	// Find the entry to remove
-	for i, watchlistItem := range w.Entries {
-
-		userIDMatch := userID == watchlistItem.UserID
-		titleMatch := title == watchlistItem.Title
-		categoryMatch := category == watchlistItem.Category
-
-		if userIDMatch && titleMatch && categoryMatch {
-			// Remove from watchlist
-			w.Entries = append(w.Entries[:i], w.Entries[i+1:]...)
-
-			// Remove from database
-			err := watchlistItem.Delete(db)
-			if err != nil {
-				return err
-			}
-
-			slog.Debug("watchlist.Delete", "watchlist", w)
-			return nil
-		}
-	}
-
-	return &EntryNotFoundError{userID, title, category}
-}
-
-// Updates an entry's link in the watchlist
-func (w *Watchlist) Update(db *sql.DB, userID string, title string, category Category, newLink string) error {
-	// Find the entry to update
-	for _, watchlistItem := range w.Entries {
-
-		userIDMatch := userID == watchlistItem.UserID
-		titleMatch := title == watchlistItem.Title
-		categoryMatch := category == watchlistItem.Category
-
-		if userIDMatch && titleMatch && categoryMatch {
-			// Updates the entry + database
-			err := watchlistItem.Update(db, newLink)
-			if err != nil {
-				return err
-			}
-
-			slog.Debug("watchlist.Update", "watchlist", w)
-			return nil
-		}
-	}
-
-	return &EntryNotFoundError{userID, title, category}
-}
-
-// view the watchlist (sorted by sort_by)
-func (w *Watchlist) Sort(sort_by Sort_by) {
+	sort_by: 	sort_by option (one of SORT_TITLE, SORT_DATE, SORT_CATEGORY)
+*/
+func (w *Watchlist) Sort(sort_by SortBy) {
 
 	// Validate the sort_by option (safe to proceed on invalid sort option)
 	if err := sort_by.IsValid(); err != nil {
@@ -188,17 +150,17 @@ func (w *Watchlist) Sort(sort_by Sort_by) {
 	// no default case --> list won't be sorted if invalid sort option is provided
 	switch sort_by {
 
-	case sortTitle:
+	case SORT_TITLE:
 		sort.Slice(w.Entries, func(i, j int) bool {
 			return w.Entries[i].Title < w.Entries[j].Title
 		})
 
-	case sortDate:
+	case SORT_DATE:
 		sort.Slice(w.Entries, func(i, j int) bool {
 			return w.Entries[i].Date.Before(w.Entries[j].Date)
 		})
 
-	case sortCategory:
+	case SORT_CATEGORY:
 		sort.Slice(w.Entries, func(i, j int) bool {
 			return w.Entries[i].Category < w.Entries[j].Category
 		})
@@ -207,7 +169,7 @@ func (w *Watchlist) Sort(sort_by Sort_by) {
 	slog.Debug("watchlist.Sort", "watchlist", w)
 }
 
-// string representation of a watchlist
+// stringer method
 func (w *Watchlist) String() string {
 	watchlistString := fmt.Sprintf("Watchlist for %s:\n", w.UserID)
 	watchlistString += strings.Repeat("-", len(watchlistString))
@@ -218,10 +180,10 @@ func (w *Watchlist) String() string {
 	return watchlistString
 }
 
-// validation method for sort_by options
-func (s *Sort_by) IsValid() error {
+// enum validation
+func (s *SortBy) IsValid() error {
 	switch *s {
-	case sortTitle, sortDate, sortCategory:
+	case SORT_TITLE, SORT_DATE, SORT_CATEGORY:
 		return nil
 	default:
 		return &InvalidSortByError{s}

@@ -37,9 +37,11 @@ Considerations
 */
 CREATE TABLE IF NOT EXISTS entries (
     userID      TEXT NOT NULL,
+    date        DATETIME NOT NULL,
     title       TEXT NOT NULL,
     category    TEXT NOT NULL,
-    date        DATETIME NOT NULL,
+    done        BOOLEAN NOT NULL,
+    rating      INTEGER,
     link        TEXT,
 
     PRIMARY KEY (userID, title, category)

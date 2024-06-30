@@ -41,7 +41,7 @@ type InvalidTimestampError struct {
 }
 
 type InvalidSortByError struct {
-	sort_by *Sort_by
+	sortBy *SortBy
 }
 
 type EntryNotFoundError struct {
@@ -73,7 +73,7 @@ func (e *InvalidTimestampError) Error() string {
 }
 
 func (e *InvalidSortByError) Error() string {
-	return fmt.Sprintf("Invalid sort_by option: %s", *e.sort_by)
+	return fmt.Sprintf("Invalid sort_by option: %s", *e.sortBy)
 }
 
 func (e *EntryNotFoundError) Error() string {
