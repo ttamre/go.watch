@@ -45,9 +45,9 @@ make
 
 | PARAMETER | TYPE | DESCRIPTION | REQUIRED |
 | --------- | ---- | ----------- | -------- |
-| title | text | title of the movie |✅|
-| category | text | one of (movie/show/anime) | ✅|
-| link | text | link to a trailer/imdb/etc |❌|
+| title | `text` | title of the movie |✅|
+| category | `text` | one of (movie/show/anime) | ✅|
+| link | `text` | link to a trailer/imdb/etc |❌|
 
 
 <h4 style="font-family:monospace">Delete an entry from your watchlist</h4>
@@ -56,8 +56,8 @@ make
 
 | PARAMETER | TYPE | DESCRIPTION | REQUIRED |
 | --------- | ---- | ----------- | -------- |
-| title | text | title of the movie | ✅|
-| category | text | one of (movie/show/anime) |❌|
+| title | `text` | title of the movie | ✅|
+| category | `text` | one of (movie/show/anime) |❌|
 
 
 <h4 style="font-family:monospace">View your watchlist</h4>
@@ -66,7 +66,7 @@ make
 
 | PARAMETER | TYPE | DESCRIPTION | REQUIRED |
 | --------- | ---- | ----------- | -------- |
-| sorting | text | one of (date/title/category) |❌|
+| sorting | `text` | one of (date/title/category) |❌|
 
 
 <h4 style="font-family:monospace">Update the link for an entry</h4>
@@ -75,9 +75,9 @@ make
 
 | PARAMETER | TYPE | DESCRIPTION | REQUIRED |
 | --------- | ---- | ----------- | -------- |
-| title | text | title of the movie | ✅|
-| category | text | one of (movie/show/anime) |❌|
-| newLink | text | link to a trailer/imdb/etc |✅|
+| title | `text` | title of the movie | ✅|
+| category | `text` | one of (movie/show/anime) |❌|
+| newLink | `text` | link to a trailer/imdb/etc |✅|
 
 
 <h4 style="font-family:monospace">Mark an entry as done</h4>
@@ -86,8 +86,8 @@ make
 
 | PARAMETER | TYPE | DESCRIPTION | REQUIRED |
 | --------- | ---- | ----------- | -------- |
-| title | text | title of the movie | ✅|
-| category | text | one of (movie/show/anime) |❌|
+| title | `text` | title of the movie | ✅|
+| category | `text` | one of (movie/show/anime) |❌|
 
 
 <h4 style="font-family:monospace">Rate an entry</h4>
@@ -96,9 +96,9 @@ make
 
 | PARAMETER | TYPE | DESCRIPTION | REQUIRED |
 | --------- | ---- | ----------- | -------- |
-| title | text | title of the movie | ✅|
-| category | text | one of (movie/show/anime) |❌|
-| rating | int | rating of the movie |✅|
+| title | `text` | title of the movie | ✅|
+| category | `text` | one of (movie/show/anime) |❌|
+| rating | `int` | rating of the movie |✅|
 
 
 <h4 style="font-family:monospace">Get a random entry from your watchlist</h4>
@@ -113,7 +113,7 @@ make
 
 | PARAMETER | TYPE | DESCRIPTION | REQUIRED |
 | --------- | ---- | ----------- | -------- |
-| command | text | command you need help with|❌|
+| command | `text` | command you need help with|❌|
 
 
 <h4 style="font-family:monospace">Get the develper's contact info + source code</h4>
