@@ -48,8 +48,44 @@ const (
 	Anime Category = "anime"
 )
 
-// Adds an entry to the database
-func (e *Entry) Add(db *sql.DB) error {
+/*
+Create a new entry object with validation
+
+Params:
+
+	userID:		user ID of the entry
+	title:		title of the entry
+	category:	category of the entry
+*/
+func NewEntry(userID string, title string, category Category, link string) (*Entry, error) {
+	e := &Entry{
+		UserID:   userID,
+		Date:     time.Now(),
+		Title:    title,
+		Category: category,
+		Done:     false,
+		Rating:   0,
+		Link:     link,
+	}
+
+	// Validate entry
+	if err := e.IsValid(); err != nil {
+		return nil, err
+	}
+
+	return e, nil
+}
+
+/*
+Adds an entry to the database
+
+Params:
+
+	db:	ptr to sqlite3 database connection
+	e:	ptr to entry object
+*/
+func AddEntry(db *sql.DB, e *Entry) error {
+
 	// Prepare insert statement
 	query := "INSERT INTO entries(userID, date, title, category, done, rating, link) VALUES(?, ?, ?, ?, ?)"
 	statement, err := db.Prepare(query)
@@ -104,10 +140,6 @@ Params:
 	title:		title of the entry
 	category:	category of the entry
 	newLink:	new link to update the entry with
-
-Returns:
-
-	error:	error object
 */
 func UpdateEntry(db *sql.DB, userID string, title string, category Category, newLink string) error {
 
@@ -138,10 +170,6 @@ Params:
 	userID:		user ID of the entry
 	title:		title of the entry
 	category:	category of the entry
-
-Returns:
-
-	error:	error object
 */
 func DoneEntry(db *sql.DB, userID string, title string, category Category) error {
 	// Prepare update statement
@@ -171,10 +199,6 @@ Params:
 	title:		title of the entry
 	category:	category of the entry
 	rating:		rating to update the entry with
-
-Returns:
-
-	error:	error object
 */
 func RateEntry(db *sql.DB, userID string, title string, category Category, rating int) error {
 	// Prepare update statement

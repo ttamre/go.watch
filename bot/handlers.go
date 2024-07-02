@@ -1,5 +1,5 @@
 /*
-go.watchlist - a watchlist manager discord bot
+watchlist - a watchlist manager discord bot
 Copyright (C) 2024 Tem Tamre
 
 This program is free software: you can redistribute it and/or modify
@@ -73,14 +73,14 @@ func MasterHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate)
 	// args = []string{"./watchlist <command> <arg1> <arg2> ..."}
 	args := REGEX_PATTERN.FindAllString(m.Content, -1)
 
-	// Send help to messages without commands
-	if len(args) < 2 {
-		helpHandler(s, m)
-	}
-
 	// Ignore messages not addressed to us
 	if args[0] != ENTRYPOINT {
 		return
+	}
+
+	// Send help to messages without commands
+	if len(args) < 2 {
+		helpHandler(s, m)
 	}
 
 	// Fire the correct handler based on given command
@@ -139,16 +139,18 @@ func addHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 		link = args[4]
 	}
 
-	entry := &Entry{
-		UserID:   m.Author.ID,
-		Title:    title,
-		Category: category,
-		Date:     time.Now(),
-		Link:     link,
+	entry, err := NewEntry(m.Author.ID, title, category, link)
+	if err != nil {
+		slog.Error("handlers.AddHandler", "msg", err)
+		return
 	}
 
 	// Add to database
-	entry.Add(db)
+	err = AddEntry(db, entry)
+	if err != nil {
+		slog.Error("handlers.AddHandler", "msg", err)
+		return
+	}
 
 	// Log and send a confirmation message
 	slog.Info("handlers.AddHandler", "user", m.Author.Username, "entry", entry)
@@ -189,6 +191,7 @@ func deleteHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate)
 	err := DeleteEntry(db, m.Author.ID, title, category)
 	if err != nil {
 		slog.Error("handlers.DeleteHandler", "msg", err)
+		return
 	}
 
 	// Log and send a confirmation message
@@ -220,7 +223,7 @@ func viewHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 	args := REGEX_PATTERN.FindAllString(m.Content, -1)
 	// no need to verify args because we have a default value for sort_by
 
-	sort_by := SORT_TITLE
+	sort_by := SORT_WATCHED
 	if len(args) >= 3 {
 		sort_by = SortBy(args[2])
 	}
@@ -229,6 +232,7 @@ func viewHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 	watchlist, err := FetchWatchlist(db, m.Author.ID, true)
 	if err != nil {
 		slog.Error("handlers.viewHandler", "msg", err)
+		return
 	}
 
 	watchlist.Sort(sort_by)
@@ -306,6 +310,7 @@ func updateHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate)
 	err := UpdateEntry(db, m.Author.ID, title, category, newLink)
 	if err != nil {
 		slog.Error("handlers.updateHandler", "msg", err)
+		return
 	}
 
 	// Log and send a confirmation message
@@ -354,6 +359,7 @@ func doneHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 	err := DoneEntry(db, m.Author.ID, title, category)
 	if err != nil {
 		slog.Error("handlers.doneHandler", "msg", err)
+		return
 	}
 
 	// Log and send a confirmation message
@@ -393,16 +399,19 @@ func rateHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// Unconventional way of initializing an error,
 		// but := cannot assign a value to err in the same line as rating
+		// and rating needs to be pre-declared
 		err error
 	)
 
 	// case 1: ./watchlist rate <title> <rating>
 	if len(args) == 4 {
 		title = args[2]
+
 		rating, err = strconv.Atoi(args[3])
 		if err != nil {
 			slog.Error("handlers.rateHandler", "msg", err)
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```invalid rating: %s```", args[3]))
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```invalid rating for %s: %s```", title, args[3]))
+			return
 		}
 	}
 
@@ -410,10 +419,12 @@ func rateHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 	if len(args) >= 5 {
 		title = args[2]
 		category = Category(args[3])
+
 		rating, err = strconv.Atoi(args[4])
 		if err != nil {
 			slog.Error("handlers.rateHandler", "msg", err)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```invalid rating for %s: %s```", title, args[4]))
+			return
 		}
 	}
 
@@ -421,6 +432,7 @@ func rateHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate) {
 	err = RateEntry(db, m.Author.ID, title, category, rating)
 	if err != nil {
 		slog.Error("handlers.rateHandler", "msg", err)
+		return
 	}
 
 	// Log and send a confirmation message
@@ -445,6 +457,7 @@ func randomHandler(db *sql.DB, s *discordgo.Session, m *discordgo.MessageCreate)
 	unwatched, err := FetchWatchlist(db, m.Author.ID, false)
 	if err != nil {
 		slog.Error("handlers.randomHandler", "msg", err)
+		return
 	}
 
 	idx := rand.Intn(len(unwatched.Entries) - 1)
@@ -535,5 +548,5 @@ Displays the contact message
 */
 func contactHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	slog.Info("handlers.ContactHandler", "user", m.Author.Username)
-	s.ChannelMessageSend(m.ChannelID, "https://github.com/ttamre/go.watch")
+	s.ChannelMessageSend(m.ChannelID, "https://github.com/ttamre/watchlist")
 }

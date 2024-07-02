@@ -41,14 +41,14 @@ func main() {
 	// Creating a database connectioni
 	db, err := sql.Open("sqlite3", *db_path)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("error connecting to %s: %s", *db_path, err)
 	}
 	defer db.Close()
 
 	// Creating a session to connect to discord server
 	session, err := discordgo.New("Bot " + os.Getenv("DISCORD_WATCHLIST_BOT_TOKEN"))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error creating session:", err)
 	}
 
 	// Registering handlers
@@ -59,12 +59,11 @@ func main() {
 	// Open a websocket connection to Discord and begin listening.
 	err = session.Open()
 	if err != nil {
-		fmt.Println("Error opening connection: ", err)
-		return
+		log.Fatal("error opening session:", err)
 	}
 	defer session.Close()
 
 	// Simple way to keep program running until CTRL-C is pressed
-	fmt.Println("bot is now running, press ctrl-c to exit...")
+	fmt.Println("watchlist is now running, press ctrl-c to exit...")
 	<-make(chan struct{})
 }

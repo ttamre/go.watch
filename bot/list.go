@@ -40,6 +40,8 @@ const (
 	SORT_TITLE    SortBy = "title"
 	SORT_DATE     SortBy = "date"
 	SORT_CATEGORY SortBy = "category"
+	SORT_WATCHED  SortBy = "watched"
+	SORT_RATING   SortBy = "rating"
 )
 
 /*
@@ -164,6 +166,16 @@ func (w *Watchlist) Sort(sort_by SortBy) {
 		sort.Slice(w.Entries, func(i, j int) bool {
 			return w.Entries[i].Category < w.Entries[j].Category
 		})
+
+	case SORT_WATCHED:
+		sort.Slice(w.Entries, func(i, j int) bool {
+			return w.Entries[i].Done == w.Entries[j].Done
+		})
+
+	case SORT_RATING:
+		sort.Slice(w.Entries, func(i, j int) bool {
+			return w.Entries[i].Rating < w.Entries[j].Rating
+		})
 	}
 
 	slog.Debug("watchlist.Sort", "watchlist", w)
@@ -183,7 +195,7 @@ func (w *Watchlist) String() string {
 // enum validation
 func (s *SortBy) IsValid() error {
 	switch *s {
-	case SORT_TITLE, SORT_DATE, SORT_CATEGORY:
+	case SORT_TITLE, SORT_DATE, SORT_CATEGORY, SORT_WATCHED, SORT_RATING:
 		return nil
 	default:
 		return &InvalidSortByError{s}

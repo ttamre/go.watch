@@ -6,7 +6,6 @@
 </div>
 
 <!-- DESCRIPTION -->
-<h2 style="font-family:monospace">Description</h2>
 <p style="font-family:monospace">A watchlist manager discord bot, written in go + sqlite3<br></p>
 
 <!-- INSTALLATION -->
@@ -15,6 +14,7 @@
 ```bash
 # clone repo
 git clone https://github.com/ttamre/watchlist.git
+cd watchlist
 
 # set this environment variable to your discord bot token
 export DISCORD_WATCHLIST_BOT_TOKEN=""
@@ -66,7 +66,7 @@ make
 
 | PARAMETER | TYPE | DESCRIPTION | REQUIRED |
 | --------- | ---- | ----------- | -------- |
-| sorting | `text` | one of (date/title/category) |❌|
+| sorting | `text` | one of (date/title/category/watched/rating) |❌|
 
 
 <h4 style="font-family:monospace">Update the link for an entry</h4>
@@ -106,7 +106,7 @@ make
 `./watchlist random`
 
 
-<h4 style="font-family:monospace">Get a random entry from your watchlist</h4>
+<h4 style="font-family:monospace">Help message</h4>
 
 `./watchlist help <command>`
 

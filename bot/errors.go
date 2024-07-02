@@ -42,12 +42,6 @@ type InvalidSortByError struct {
 	sortBy *SortBy
 }
 
-type EntryNotFoundError struct {
-	userID   string
-	title    string
-	category Category
-}
-
 type NotEnoughArgumentsError struct {
 	message string
 }
@@ -55,29 +49,25 @@ type NotEnoughArgumentsError struct {
 /* CLASS METHODS */
 
 func (e *InvalidUserIDError) Error() string {
-	return fmt.Sprintf("Invalid user ID: %s", e.userID)
+	return fmt.Sprintf("invalid user ID: %s", e.userID)
 }
 
 func (e *InvalidTitleError) Error() string {
-	return fmt.Sprintf("Invalid title: %s", e.title)
+	return fmt.Sprintf("invalid title: %s", e.title)
 }
 
 func (e *InvalidCategoryError) Error() string {
-	return fmt.Sprintf("Invalid category option: %s", *e.category)
+	return fmt.Sprintf("invalid category option: %s", *e.category)
 }
 
 func (e *InvalidTimestampError) Error() string {
-	return fmt.Sprintf("Invalid timestamp: %s", e.time)
+	return fmt.Sprintf("invalid timestamp: %s", e.time)
 }
 
 func (e *InvalidSortByError) Error() string {
-	return fmt.Sprintf("Invalid sort_by option: %s", *e.sortBy)
-}
-
-func (e *EntryNotFoundError) Error() string {
-	return fmt.Sprintf("Entry not found for %s: %s (%s)", e.userID, e.title, e.category)
+	return fmt.Sprintf("invalid sorting option: %s", *e.sortBy)
 }
 
 func (e *NotEnoughArgumentsError) Error() string {
-	return fmt.Sprintf("Received: %s", e.message)
+	return fmt.Sprintf("not enough arguments: %s", e.message)
 }
